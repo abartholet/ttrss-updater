@@ -1,0 +1,64 @@
+#!/bin/bash
+DATE=`date +"%Y%m%d-%H%M%S"`
+
+DIR_GIT=$HOME/src/tt-rss
+DIR_HOST=
+DIR_PATH=
+DIR_TT=$HOME/$DIR_HOST/$DIR_PATH
+DIR_BK=$HOME/backups/tt-rss
+DIR_ETC=$HOME/etc
+
+URL_TT="https://www.$DIR_HOST/$DIR_PATH/"
+
+MYSQL_HOST=
+MYSQL_PORT=3306
+MYSQL_NAME=
+MYSQL_USER=
+MYSQL_PASS=
+
+FEED_CRYPT_KEY=
+
+# stop update cron
+echo "Stopping feed update."
+sed -e "/update.php --feeds/ s/^#*/#/" -i $DIR_ETC/crontab
+/usr/bin/crontab $DIR_ETC/crontab
+
+# backup current install, delete backups older than 2 weeks
+cd $HOME/$DIR_HOST
+mkdir -p $DIR_BK
+echo "Backing up tt-rss directory."
+tar -cf $DIR_BK/tt-rss-${DATE}.tar $DIR_PATH
+echo "Backing up tt-rss database."
+mysqldump -h$MYSQL_HOST -u$MYSQL_USER -p$MYSQL_PASS $MYSQL_NAME | bzip2 > $DIR_BK/tt-rss-db-${DATE}.sql.bz2
+find $DIR_BK -mtime +14 -exec rm {} \;
+
+# pull down from git and copy updated files only
+if [ ! -d $DIR_GIT ]; then
+    echo "Cloning from git repository."
+    git clone https://git.tt-rss.org/git/tt-rss $DIR_GIT
+fi
+cd $DIR_GIT
+echo "Pulling from git repository."
+git pull
+
+# copy only modified files, except git related
+rsync -rvch --exclude=.git/ --exclude=.buildpath --exclude=.gitignore --exclude=.project $DIR_GIT/ $DIR_TT
+
+# always use new config file, maybe there are new parameters
+echo "Updating config.php"
+cp $DIR_TT/config.php-dist $DIR_TT/config.php
+
+# change config file to personalized settings
+sed -i "/DB_TYPE/ s/pgsql/mysql/" $DIR_TT/config.php
+sed -i "/DB_HOST/ s/localhost/$MYSQL_HOST/" $DIR_TT/config.php
+sed -i "/DB_NAME/ s/fox/$MYSQL_NAME/" $DIR_TT/config.php
+sed -i "/DB_USER/ s/fox/$MYSQL_USER/" $DIR_TT/config.php
+sed -i "/DB_PASS/ s/XXXXXX/$MYSQL_PASS/" $DIR_TT/config.php
+sed -i "/DB_PORT/ s/''/'$MYSQL_PORT'/" $DIR_TT/config.php
+sed -i "/SELF_URL_PATH/ s,https://example.org/tt-rss/,$URL_TT," $DIR_TT/config.php
+sed -i "/FEED_CRYPT_KEY/ s/''/'$FEED_CRYPT_KEY'/" $DIR_TT/config.php
+
+# start update cron
+echo "Starting feed update."
+sed -e "/update.php --feeds/ s/#*//" -i $DIR_ETC/crontab
+/usr/bin/crontab $DIR_ETC/crontab
