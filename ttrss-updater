@@ -1,7 +1,6 @@
 #!/bin/bash
 DATE=`date +"%Y%m%d-%H%M%S"`
 
-DIR_GIT=$HOME/src/tt-rss
 DIR_HOST=
 DIR_PATH=
 DIR_TT=$HOME/$DIR_HOST/$DIR_PATH
@@ -24,25 +23,24 @@ sed -e "/update.php --feeds/ s/^#*/#/" -i $DIR_ETC/crontab
 /usr/bin/crontab $DIR_ETC/crontab
 
 # backup current install, delete backups older than 2 weeks
-cd $HOME/$DIR_HOST
-mkdir -p $DIR_BK
-echo "Backing up tt-rss directory."
-tar -cf $DIR_BK/tt-rss-${DATE}.tar $DIR_PATH
-echo "Backing up tt-rss database."
-mysqldump -h$MYSQL_HOST -u$MYSQL_USER -p$MYSQL_PASS $MYSQL_NAME | bzip2 > $DIR_BK/tt-rss-db-${DATE}.sql.bz2
-find $DIR_BK -mtime +14 -exec rm {} \;
+if [ -d $DIR_TT ]; then
+    cd $HOME/$DIR_HOST
+    mkdir -p $DIR_BK
+    echo "Backing up tt-rss directory."
+    tar -cf $DIR_BK/tt-rss-${DATE}.tar $DIR_PATH
+    echo "Backing up tt-rss database."
+    mysqldump -h$MYSQL_HOST -u$MYSQL_USER -p$MYSQL_PASS $MYSQL_NAME | bzip2 > $DIR_BK/tt-rss-db-${DATE}.sql.bz2
+    find $DIR_BK -mtime +14 -exec rm {} \;
+fi
 
 # pull down from git and copy updated files only
-if [ ! -d $DIR_GIT ]; then
+if [ ! -d $DIR_TT ]; then
     echo "Cloning from git repository."
-    git clone https://git.tt-rss.org/git/tt-rss $DIR_GIT
+    git clone https://git.tt-rss.org/git/tt-rss $DIR_TT
 fi
-cd $DIR_GIT
+cd $DIR_TT
 echo "Pulling from git repository."
 git pull
-
-# copy only modified files, except git related
-rsync -rvch --exclude=.git/ --exclude=.buildpath --exclude=.gitignore --exclude=.project $DIR_GIT/ $DIR_TT
 
 # always use new config file, maybe there are new parameters
 echo "Updating config.php"
