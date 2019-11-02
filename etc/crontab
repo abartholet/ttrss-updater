@@ -1,2 +1,0 @@
-MAILTO=""
-*/5 * * * * /usr/bin/php <path to ttrss reader update script> --feeds --quiet
