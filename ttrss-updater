@@ -1,62 +1,109 @@
-#!/bin/bash
-DATE=`date +"%Y%m%d-%H%M%S"`
+#!/usr/bin/env bash
+script_dir=$(dirname "$(readlink -f "$0")")
+script_name=$(basename $0)
 
-DIR_HOST=
-DIR_PATH=
-DIR_TT=$HOME/$DIR_HOST/$DIR_PATH
-DIR_BK=$HOME/backups/tt-rss
-DIR_ETC=$HOME/etc
+now=`date +"%Y%m%d-%H%M%S"`
 
-URL_TT="https://www.$DIR_HOST/$DIR_PATH/"
+dir_host=
+dir_path=
+dir_tt=$HOME/$dir_host/$dir_path
+dir_bk=$HOME/backups/tt-rss
 
-MYSQL_HOST=
-MYSQL_PORT=3306
-MYSQL_NAME=
-MYSQL_USER=
-MYSQL_PASS=
+url_tt="https://www.$dir_host/$dir_path/"
 
-FEED_CRYPT_KEY=
+mysql_host=
+mysql_port=3306
+mysql_name=
+mysql_user=
+mysql_pass=
 
-# stop update cron
+feed_crypt_key=
+
+# Check permissions on this file.
+perms=$(stat $script_dir/$script_name | sed -n '/^Access: (/{s/Access: (\([0-9]\+\).*$/\1/;p}')
+if [[ "$perms" != "0700" ]]; then
+    echo "WARNING: It is recommended to set $script_name permissions to '0700.'"
+fi
+
+# Check for tt-rss update cron job.
+echo "Checking cron jobs."
+if ! crontab -l | grep -q "ttrss-updater"; then
+    # Add tt-rss update cron job.
+    echo "Adding tt-rss update cron job."
+    crontab -l | { cat; echo "0 3 1 * *	$script_dir/ttrss-updater"; } | crontab -
+fi
+
+# Check for feed update cron job.
+if ! crontab -l | grep -q "/update.php --feeds"; then
+    # Add feed update cron job.
+    echo "Adding feed update cron job."
+    crontab -l | { cat; echo "*/5 * * * *	/usr/bin/php $dir_tt/update.php --feeds --quiet"; } | crontab -
+fi
+
+# Stop feed update cron job.
 echo "Stopping feed update."
-sed -e "/update.php --feeds/ s/^#*/#/" -i $DIR_ETC/crontab
-/usr/bin/crontab $DIR_ETC/crontab
+crontab -l | sed -e "/update.php --feeds/ s/^#*/#/" | crontab -
 
-# backup current install, delete backups older than 2 weeks
-if [ -d $DIR_TT ]; then
-    cd $HOME/$DIR_HOST
-    mkdir -p $DIR_BK
+# Backup current install, delete backups older than 2 weeks.
+if [ -d $dir_tt ]; then
+    cd $HOME/$dir_host
+    mkdir -p $dir_bk
     echo "Backing up tt-rss directory."
-    tar -cf $DIR_BK/tt-rss-${DATE}.tar $DIR_PATH
+    tar -cf $dir_bk/tt-rss-${now}.tar $dir_path
     echo "Backing up tt-rss database."
-    mysqldump -h$MYSQL_HOST -u$MYSQL_USER -p$MYSQL_PASS $MYSQL_NAME | bzip2 > $DIR_BK/tt-rss-db-${DATE}.sql.bz2
-    find $DIR_BK -mtime +14 -exec rm {} \;
+    mysqldump -h$mysql_host -u$mysql_user -p$mysql_pass $mysql_name 2>/dev/null | bzip2 > $dir_bk/tt-rss-db-${now}.sql.bz2
+    find $dir_bk -mtime +14 -exec rm {} \;
 fi
 
-# pull down from git and copy updated files only
-if [ ! -d $DIR_TT ]; then
+# Pull from git.
+if [ ! -d $dir_tt ]; then
     echo "Cloning from git repository."
-    git clone https://git.tt-rss.org/git/tt-rss $DIR_TT
+    git clone https://git.tt-rss.org/git/tt-rss $dir_tt
+else
+    echo "Pulling from git repository."
+    cd $dir_tt
+    git pull
 fi
-cd $DIR_TT
-echo "Pulling from git repository."
-git pull
 
-# always use new config file, maybe there are new parameters
-echo "Updating config.php"
-cp $DIR_TT/config.php-dist $DIR_TT/config.php
+# Always use new config file, there maybe new parameters.
+echo "Updating config.php."
+cp $dir_tt/config.php-dist $dir_tt/config.php
 
-# change config file to personalized settings
-sed -i "/DB_TYPE/ s/pgsql/mysql/" $DIR_TT/config.php
-sed -i "/DB_HOST/ s/localhost/$MYSQL_HOST/" $DIR_TT/config.php
-sed -i "/DB_NAME/ s/fox/$MYSQL_NAME/" $DIR_TT/config.php
-sed -i "/DB_USER/ s/fox/$MYSQL_USER/" $DIR_TT/config.php
-sed -i "/DB_PASS/ s/XXXXXX/$MYSQL_PASS/" $DIR_TT/config.php
-sed -i "/DB_PORT/ s/''/'$MYSQL_PORT'/" $DIR_TT/config.php
-sed -i "/SELF_URL_PATH/ s,https://example.org/tt-rss/,$URL_TT," $DIR_TT/config.php
-sed -i "/FEED_CRYPT_KEY/ s/''/'$FEED_CRYPT_KEY'/" $DIR_TT/config.php
+# Change config file to personalized settings.
+sed -i "/DB_TYPE/ s/pgsql/mysql/" $dir_tt/config.php
+sed -i "/DB_HOST/ s/localhost/$mysql_host/" $dir_tt/config.php
+sed -i "/DB_NAME/ s/fox/$mysql_name/" $dir_tt/config.php
+sed -i "/DB_USER/ s/fox/$mysql_user/" $dir_tt/config.php
+sed -i "/DB_PASS/ s/XXXXXX/$mysql_pass/" $dir_tt/config.php
+sed -i "/DB_PORT/ s/''/'$mysql_port'/" $dir_tt/config.php
+sed -i "/SELF_URL_PATH/ s,https://example.org/tt-rss/,$url_tt," $dir_tt/config.php
+sed -i "/feed_crypt_key/ s/''/'$feed_crypt_key'/" $dir_tt/config.php
 
-# start update cron
+# Restrict permissions on config file.
+chmod 0700 $dir_tt/config.php
+
+# Update .htaccess file.
+echo "Updating .htaccess file."
+cat << EOF > $dir_tt/.htaccess
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<IfModule alias_module>
+    RedirectMatch 404 /config.php
+    RedirectMatch 404 /README.md
+    RedirectMatch 404 /\.git
+    RedirectMatch 404 /cache
+</IfModule>
+EOF
+
+# Start feed update cron job.
 echo "Starting feed update."
-sed -e "/update.php --feeds/ s/#*//" -i $DIR_ETC/crontab
-/usr/bin/crontab $DIR_ETC/crontab
+crontab -l | sed -e "/update.php --feeds/ s/#*//" | crontab -
+
+# Check website for errors.
+if [[ $(curl -s -I -o /dev/null -w '%{http_code}' $url_tt) != 200 ]] || curl -s $url_tt | grep -q "Startup failed"; then
+    echo "Error loading webpage."
+else
+    echo "No webpage errors detected."
+fi
