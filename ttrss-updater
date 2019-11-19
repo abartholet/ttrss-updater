@@ -17,8 +17,6 @@ mysql_name=
 mysql_user=
 mysql_pass=
 
-feed_crypt_key=
-
 # Check permissions on this file.
 perms=$(stat $script_dir/$script_name | sed -n '/^Access: (/{s/Access: (\([0-9]\+\).*$/\1/;p}')
 if [[ "$perms" != "0700" ]]; then
@@ -37,7 +35,7 @@ fi
 if ! crontab -l | grep -q "/update.php --feeds"; then
     # Add feed update cron job.
     echo "Adding feed update cron job."
-    crontab -l | { cat; echo "*/5 * * * *	/usr/bin/php $dir_tt/update.php --feeds --quiet"; } | crontab -
+    crontab -l | { cat; echo "*/5 * * * *	/usr/bin/php $dir_tt/update.php --feeds --quiet &> /dev/null"; } | crontab -
 fi
 
 # Stop feed update cron job.
@@ -49,14 +47,14 @@ if [ -d $dir_tt ]; then
     cd $HOME/$dir_host
     mkdir -p $dir_bk
     echo "Backing up tt-rss directory."
-    tar -cf $dir_bk/tt-rss-${now}.tar $(basename $dir_tt)
+    tar -cf $dir_bk/tt-rss-${now}.tar -C $(dirname $dir_tt) $(basename $dir_tt)
     echo "Backing up tt-rss database."
     mysqldump -h$mysql_host -u$mysql_user -p$mysql_pass $mysql_name 2>/dev/null | bzip2 > $dir_bk/tt-rss-db-${now}.sql.bz2
     find $dir_bk -mtime +14 -exec rm {} \;
 fi
 
 # Pull from git.
-if [ ! -d $dir_tt ]; then
+if [ ! -d $dir_tt/.git ]; then
     echo "Cloning from git repository."
     git clone https://git.tt-rss.org/git/tt-rss $dir_tt
 else
@@ -77,7 +75,6 @@ sed -i "/DB_USER/ s/fox/$mysql_user/" $dir_tt/config.php
 sed -i "/DB_PASS/ s/XXXXXX/$mysql_pass/" $dir_tt/config.php
 sed -i "/DB_PORT/ s/''/'$mysql_port'/" $dir_tt/config.php
 sed -i "/SELF_URL_PATH/ s,https://example.org/tt-rss/,$url_tt," $dir_tt/config.php
-sed -i "/feed_crypt_key/ s/''/'$feed_crypt_key'/" $dir_tt/config.php
 
 # Restrict permissions on config file.
 chmod 0700 $dir_tt/config.php
