@@ -9,7 +9,7 @@ now=`date +"%Y%m%d-%H%M%S"`
 
 # Check permissions on this file.
 perms=$(stat $script_dir/config | sed -n '/^Access: (/{s/Access: (\([0-9]\+\).*$/\1/;p}')
-if [[ "$perms" != "0700" ]]; then
+if [[ "$perms" != "0600" ]]; then
     echo "WARNING: It is recommended to set '$config_file' permissions to '0600.'"
 fi
 
@@ -74,7 +74,7 @@ sed -i "/DB_PORT/ s/%DB_PORT/$DB_PORT/" $dir_tt/config.php
 sed -i "/SELF_URL_PATH/ s,%SELF_URL_PATH,$SELF_URL_PATH," $dir_tt/config.php
 
 # Restrict permissions on config file.
-chmod 0700 $dir_tt/config.php
+chmod 0600 $dir_tt/config.php
 
 # Update .htaccess file.
 echo "Updating .htaccess file."
