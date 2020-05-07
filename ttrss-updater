@@ -1,26 +1,16 @@
 #!/usr/bin/env bash
-script_dir=$(dirname "$(readlink -f "$0")")
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 script_name=$(basename $0)
+config_file=$script_dir/config
+
+source $config_file
 
 now=`date +"%Y%m%d-%H%M%S"`
 
-dir_host=
-dir_path=
-dir_tt=$HOME/$dir_host/$dir_path
-dir_bk=$HOME/backups/tt-rss
-
-url_tt="https://www.$dir_host/$dir_path/"
-
-mysql_host=
-mysql_port=3306
-mysql_name=
-mysql_user=
-mysql_pass=
-
 # Check permissions on this file.
-perms=$(stat $script_dir/$script_name | sed -n '/^Access: (/{s/Access: (\([0-9]\+\).*$/\1/;p}')
+perms=$(stat $script_dir/config | sed -n '/^Access: (/{s/Access: (\([0-9]\+\).*$/\1/;p}')
 if [[ "$perms" != "0700" ]]; then
-    echo "WARNING: It is recommended to set $script_name permissions to '0700.'"
+    echo "WARNING: It is recommended to set '$config_file' permissions to '0600.'"
 fi
 
 # Check for tt-rss update cron job.
@@ -42,15 +32,22 @@ fi
 echo "Stopping feed update."
 crontab -l | sed -e "/update.php --feeds/ s/^#*/#/" | crontab -
 
-# Backup current install, delete backups older than 2 weeks.
+# Backup current install, delete backups older than 60 days.
 if [ -d $dir_tt ]; then
-    cd $HOME/$dir_host
+    cd "$( dirname "$dir_tt" )"
     mkdir -p $dir_bk
     echo "Backing up tt-rss directory."
     tar -cf $dir_bk/tt-rss-${now}.tar -C $(dirname $dir_tt) $(basename $dir_tt)
     echo "Backing up tt-rss database."
-    mysqldump -h$mysql_host -u$mysql_user -p$mysql_pass $mysql_name 2>/dev/null | bzip2 > $dir_bk/tt-rss-db-${now}.sql.bz2
-    find $dir_bk -mtime +14 -exec rm {} \;
+    if [ "$DB_TYPE" == "mysql" ]; then
+        mysqldump -h$DB_HOST -u$DB_USER -p$DB_PASS $DB_NAME 2>/dev/null | bzip2 > $dir_bk/tt-rss-db-${now}.sql.bz2
+    elif [ "$DB_TYPE" == "pgsql" ]; then
+        # This may not work since I haven't tested it with postgresql,
+        # you probably need a .pgpass file in your home directory at the
+        # least with your password in it.
+        pg_dump -h$DB_HOST -U$DB_USER $DB_NAME 2>/dev/null | bzip2 > $dir_bk/tt-rss-db-${now}.sql.bz2
+    fi
+    find $dir_bk -mtime +60 -exec rm {} \;
 fi
 
 # Pull from git.
@@ -68,13 +65,13 @@ echo "Updating config.php."
 cp $dir_tt/config.php-dist $dir_tt/config.php
 
 # Change config file to personalized settings.
-sed -i "/DB_TYPE/ s/pgsql/mysql/" $dir_tt/config.php
-sed -i "/DB_HOST/ s/localhost/$mysql_host/" $dir_tt/config.php
-sed -i "/DB_NAME/ s/fox/$mysql_name/" $dir_tt/config.php
-sed -i "/DB_USER/ s/fox/$mysql_user/" $dir_tt/config.php
-sed -i "/DB_PASS/ s/XXXXXX/$mysql_pass/" $dir_tt/config.php
-sed -i "/DB_PORT/ s/''/'$mysql_port'/" $dir_tt/config.php
-sed -i "/SELF_URL_PATH/ s,https://example.org/tt-rss/,$url_tt," $dir_tt/config.php
+sed -i "/DB_TYPE/ s/%DB_TYPE/$DB_TYPE/" $dir_tt/config.php
+sed -i "/DB_HOST/ s/%DB_HOST/$DB_HOST/" $dir_tt/config.php
+sed -i "/DB_NAME/ s/%DB_NAME/$DB_NAME/" $dir_tt/config.php
+sed -i "/DB_USER/ s/%DB_USER/$DB_USER/" $dir_tt/config.php
+sed -i "/DB_PASS/ s/%DB_PASS/$DB_PASS/" $dir_tt/config.php
+sed -i "/DB_PORT/ s/%DB_PORT/$DB_PORT/" $dir_tt/config.php
+sed -i "/SELF_URL_PATH/ s,%SELF_URL_PATH,$SELF_URL_PATH," $dir_tt/config.php
 
 # Restrict permissions on config file.
 chmod 0700 $dir_tt/config.php
@@ -99,7 +96,7 @@ echo "Starting feed update."
 crontab -l | sed -e "/update.php --feeds/ s/#*//" | crontab -
 
 # Check website for errors.
-if [[ $(curl -s -I -o /dev/null -w '%{http_code}' $url_tt) != 200 ]] || curl -s $url_tt | grep -q "Startup failed"; then
+if [[ $(curl -s -I -o /dev/null -w '%{http_code}' $SELF_URL_PATH) != 200 ]] || curl -s $SELF_URL_PATH | grep -q "Startup failed"; then
     echo "Error loading webpage."
 else
     echo "No webpage errors detected."

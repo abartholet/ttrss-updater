@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+# These are variables I use to define the directory and url path for my
+# tt-rss install, adjust, ignore, or replace as needed, these are not
+# used in the updater script.
+dir_host=
+dir_path=
+
+# The rest of these variables are used in the updater script, if they
+# are missing, things will probably break.
+
+# The install path of tt-rss.
+dir_tt=$HOME/$dir_host/$dir_path
+
+# The directory for the tt-rss and the database backups.
+dir_bk=$HOME/backups/tt-rss
+
+# Variables for tt-rss that get plugged into the config file.
+DB_TYPE=mysql
+DB_HOST=
+DB_PORT=3306
+DB_NAME=
+DB_USER=
+DB_PASS=
+SELF_URL_PATH="https://www.$dir_host/$dir_path/"
