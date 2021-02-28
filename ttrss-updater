@@ -60,25 +60,25 @@ else
     git pull
 fi
 
-# Always use new config file, there maybe new parameters.
-echo "Updating config.php."
-cp $dir_tt/config.php-dist $dir_tt/config.php
-
-# Change config file to personalized settings.
-sed -i "/DB_TYPE/ s/%DB_TYPE/$DB_TYPE/" $dir_tt/config.php
-sed -i "/DB_HOST/ s/%DB_HOST/$DB_HOST/" $dir_tt/config.php
-sed -i "/DB_NAME/ s/%DB_NAME/$DB_NAME/" $dir_tt/config.php
-sed -i "/DB_USER/ s/%DB_USER/$DB_USER/" $dir_tt/config.php
-sed -i "/DB_PASS/ s/%DB_PASS/$DB_PASS/" $dir_tt/config.php
-sed -i "/DB_PORT/ s/%DB_PORT/$DB_PORT/" $dir_tt/config.php
-sed -i "/SELF_URL_PATH/ s,%SELF_URL_PATH,$SELF_URL_PATH," $dir_tt/config.php
+# Write the config file.
+echo "Writing config.php."
+cat > $dir_tt/config.php<< EOF
+<?php
+    putenv('TTRSS_DB_TYPE=${DB_TYPE}');
+    putenv('TTRSS_DB_HOST=${DB_HOST}');
+    putenv('TTRSS_DB_PORT=${DB_PORT}');
+    putenv('TTRSS_DB_NAME=${DB_NAME}');
+    putenv('TTRSS_DB_USER=${DB_USER}');
+    putenv('TTRSS_DB_PASS=${DB_PASS}');
+    putenv('TTRSS_SELF_URL_PATH=${SELF_URL_PATH}');
+EOF
 
 # Restrict permissions on config file.
 chmod 0600 $dir_tt/config.php
 
 # Update .htaccess file.
 echo "Updating .htaccess file."
-cat << EOF > $dir_tt/.htaccess
+cat > $dir_tt/.htaccess<< EOF
 <FilesMatch "^\.">
     Require all denied
 </FilesMatch>
