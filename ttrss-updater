@@ -3,14 +3,66 @@ script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 script_name=$(basename $0)
 config_file=$script_dir/config
 
-source $config_file
+# Check for config file.
+if [ ! -f $config_file ]; then
+    echo "Missing $config_file, see config.sample"
+fi
 
 now=`date +"%Y%m%d-%H%M%S"`
 
-# Check permissions on this file.
-perms=$(stat $script_dir/config | sed -n '/^Access: (/{s/Access: (\([0-9]\+\).*$/\1/;p}')
+# Check permissions on the config for this script.
+perms=$(stat $config_file | sed -n '/^Access: (/{s/Access: (\([0-9]\+\).*$/\1/;p}')
 if [[ "$perms" != "0600" ]]; then
     echo "WARNING: It is recommended to set '$config_file' permissions to '0600.'"
+fi
+
+source $config_file
+
+# Check for missing variables.
+if [ -z $repo_tt ]; then
+    echo "Varaible repo_tt must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $dir_tt ]; then
+    echo "Varaible dir_tt must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $dir_bk ]; then
+    echo "Varaible dir_bk must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_TYPE ]; then
+    echo "Varaible DB_TYPE must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_HOST ]; then
+    echo "Varaible DB_HOST must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_PORT ]; then
+    echo "Varaible DB_PORT must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_NAME ]; then
+    echo "Varaible DB_NAME must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_USER ]; then
+    echo "Varaible DB_USER must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_PASS ]; then
+    echo "Varaible DB_PASS must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $SELF_URL_PATH ]; then
+    echo "Varaible SELF_URL_PATH must be set in ${config_file}.  See config.sample"
+fi
+
+# Check if the tt-rss git repo exists (sometimes it changes).
+echo "Checking tt-rss repo."
+if ! git ls-remote $repo_tt 2>&1 1>/dev/null; then
+    exit 1
 fi
 
 # Check for tt-rss update cron job.
@@ -50,14 +102,19 @@ if [ -d $dir_tt ]; then
     find $dir_bk -mtime +60 -exec rm {} \;
 fi
 
-# Pull from git.
+# Clone or pull from git.
 if [ ! -d $dir_tt/.git ]; then
     echo "Cloning from git repository."
-    git clone https://git.tt-rss.org/git/tt-rss $dir_tt
+    git clone $repo_tt $dir_tt
 else
-    echo "Pulling from git repository."
     cd $dir_tt
-    git pull
+    # Check if the fetch url is the same as the one in the config.
+    if [ ! $(git remote -v | grep "\(fetch\)" | awk '{print $2}') == $repo_tt ]; then
+        echo "Updating remote origin."
+        git remote set-url origin $repo_tt
+    fi
+    echo "Pulling from git repository."
+    git pull origin master
 fi
 
 # Write the config file.
@@ -91,6 +148,10 @@ cat > $dir_tt/.htaccess<< EOF
 </IfModule>
 EOF
 
+# Update the data base.
+echo "Updating the database."
+php $dir_tt/update.php --update-schema
+
 # Start feed update cron job.
 echo "Starting feed update."
 crontab -l | sed -e "/update.php --feeds/ s/#*//" | crontab -
@@ -101,3 +162,4 @@ if [[ $(curl -s -I -o /dev/null -w '%{http_code}' $SELF_URL_PATH) != 200 ]] || c
 else
     echo "No webpage errors detected."
 fi
+

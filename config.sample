@@ -2,12 +2,16 @@
 
 # These are variables I use to define the directory and url path for my
 # tt-rss install, adjust, ignore, or replace as needed, these are not
-# used in the updater script.
+# used in the updater script, they are only used to create the
+# SELF_URL_PATH variable.
 dir_host=
 dir_path=
 
 # The rest of these variables are used in the updater script, if they
 # are missing, things will probably break.
+
+# tt-rss git repository.
+repo_tt=https://git.tt-rss.org/fox/tt-rss.git
 
 # The install path of tt-rss.
 dir_tt=$HOME/$dir_host/$dir_path
