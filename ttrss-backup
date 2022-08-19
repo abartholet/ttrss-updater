@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+script_name=$(basename $0)
+config_file=$script_dir/config
+
+# Check for config file.
+if [ ! -f $config_file ]; then
+    echo "Missing $config_file, see config.sample"
+fi
+
+now=`date +"%Y%m%d-%H%M%S"`
+
+# Check permissions on the config for this script.
+perms=$(stat $config_file | sed -n '/^Access: (/{s/Access: (\([0-9]\+\).*$/\1/;p}')
+if [[ "$perms" != "0600" ]]; then
+    echo "WARNING: It is recommended to set '$config_file' permissions to '0600.'"
+fi
+
+source $config_file
+
+# Check for missing variables.
+if [ -z $dir_tt ]; then
+    echo "Varaible dir_tt must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $dir_bk ]; then
+    echo "Varaible dir_bk must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_TYPE ]; then
+    echo "Varaible DB_TYPE must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_HOST ]; then
+    echo "Varaible DB_HOST must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_PORT ]; then
+    echo "Varaible DB_PORT must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_NAME ]; then
+    echo "Varaible DB_NAME must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_USER ]; then
+    echo "Varaible DB_USER must be set in ${config_file}.  See config.sample"
+fi
+
+if [ -z $DB_PASS ]; then
+    echo "Varaible DB_PASS must be set in ${config_file}.  See config.sample"
+fi
+
+# Stop feed update cron job.
+echo "Stopping feed update."
+crontab -l | sed -e "/update.php --feeds/ s/^#*/#/" | crontab -
+
+# Backup current install.
+if [ -d $dir_tt ]; then
+    cd "$( dirname "$dir_tt" )"
+    mkdir -p $dir_bk
+    echo "Backing up tt-rss directory."
+    tar -cf $dir_bk/tt-rss-${now}.tar -C $(dirname $dir_tt) $(basename $dir_tt)
+    echo "Backing up tt-rss database."
+    if [ "$DB_TYPE" == "mysql" ]; then
+        mysqldump -h$DB_HOST -u$DB_USER -p$DB_PASS $DB_NAME 2>/dev/null | bzip2 > $dir_bk/tt-rss-db-${now}.sql.bz2
+    elif [ "$DB_TYPE" == "pgsql" ]; then
+        # This may not work since I haven't tested it with postgresql,
+        # you probably need a .pgpass file in your home directory at the
+        # least with your password in it.
+        pg_dump -h$DB_HOST -U$DB_USER $DB_NAME 2>/dev/null | bzip2 > $dir_bk/tt-rss-db-${now}.sql.bz2
+    fi
+    find $dir_bk -mtime +60 -exec rm {} \;
+fi
+
+# Start feed update cron job.
+echo "Starting feed update."
+crontab -l | sed -e "/update.php --feeds/ s/#*//" | crontab -
