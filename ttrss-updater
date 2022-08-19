@@ -150,7 +150,7 @@ EOF
 
 # Update the data base.
 echo "Updating the database."
-php $dir_tt/update.php --update-schema
+php $dir_tt/update.php --update-schema=force-yes
 
 # Start feed update cron job.
 echo "Starting feed update."
